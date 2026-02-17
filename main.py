@@ -1,10 +1,17 @@
+<<<<<<< HEAD
 from fastapi import FastAPI, File, UploadFile
+=======
+from fastapi import FastAPI
+>>>>>>> 3f4ba639343ed8b71677c6902aba9146f9ea72ad
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import os
 import anthropic
+<<<<<<< HEAD
 import base64
 
+=======
+>>>>>>> 3f4ba639343ed8b71677c6902aba9146f9ea72ad
 
 app = FastAPI()
 
@@ -140,6 +147,7 @@ async function save() {
 
 setInterval(fetchStatus, 2000);
 fetchStatus();
+<<<<<<< HEAD
 
 @app.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
@@ -175,6 +183,8 @@ async def upload_image(file: UploadFile = File(...)):
 
     return {"analysis": result}
 
+=======
+>>>>>>> 3f4ba639343ed8b71677c6902aba9146f9ea72ad
 </script>
 </body>
 </html>
