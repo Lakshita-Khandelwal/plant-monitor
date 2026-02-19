@@ -35,12 +35,12 @@ async def handle_plant_data(
         # Claude needs base64 for the Vision API
         base64_img = base64.b64encode(img_bytes).decode("utf-8")
         
-        # 3. Get AI Analysis from Claude 3.7 Sonnet
-        # Using the newest model for improved botanical reasoning
+        # 3. Get AI Analysis from Claude 3.5 Sonnet
+        # Using the latest model for improved botanical reasoning
         response = claude.messages.create(
-            model="claude-3-7-sonnet-20250219",
+            model="claude-3-5-sonnet-latest",
             max_tokens=500,
-            system="You are a professional botanist. Analyze plant health from images and sensor data.",
+            system="You are a professional botanist. Analyze plant and accordingly give a health assessment from images and sensor data.",
             messages=[{
                 "role": "user", 
                 "content": [
