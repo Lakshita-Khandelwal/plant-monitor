@@ -1,191 +1,109 @@
-<<<<<<< HEAD
-from fastapi import FastAPI, File, UploadFile
-=======
-from fastapi import FastAPI
->>>>>>> 3f4ba639343ed8b71677c6902aba9146f9ea72ad
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 import os
-import anthropic
-<<<<<<< HEAD
 import base64
+from typing import Annotated
+from fastapi import FastAPI, Form, File, UploadFile, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from anthropic import Anthropic
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
-=======
->>>>>>> 3f4ba639343ed8b71677c6902aba9146f9ea72ad
+# 1. Setup & Config
+load_dotenv()
 
-app = FastAPI()
+app = FastAPI(title="AI Plant Monitor Backend")
 
-# -------------------------
-# GLOBAL STATE (lightweight)
-# -------------------------
-current_temperature = None
-threshold_value = 15.0
-action = "LED"
+# Mount static files (HTML, CSS, JS)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-client = anthropic.Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY")
+# Initialize Clients
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL") or "", 
+    os.getenv("SUPABASE_KEY") or ""
 )
-
-# -------------------------
-# DATA MODELS
-# -------------------------
-class SensorData(BaseModel):
-    temperature: float
-
-class Settings(BaseModel):
-    threshold: float
-    action: str
-
-# -------------------------
-# SENSOR ENDPOINT (ESP32)
-# -------------------------
-@app.post("/check")
-def check_temperature(data: SensorData):
-    global current_temperature
-    current_temperature = data.temperature
-
-    prompt = f"""
-    Temperature is {data.temperature}°C.
-    Threshold is {threshold_value}°C.
-    If temperature >= threshold respond ONLY with:
-    OVERHEAT
-    Else respond ONLY with:
-    NORMAL
-    """
-
-    msg = client.messages.create(
-        model="claude-3-haiku-20240307",
-        max_tokens=5,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    result = msg.content[0].text.strip()
-
-    return {
-        "temperature": data.temperature,
-        "overheat": result == "OVERHEAT",
-        "action": action
-    }
-
-# -------------------------
-# SETTINGS FROM GUI
-# -------------------------
-@app.post("/settings")
-def update_settings(data: Settings):
-    global threshold_value, action
-    threshold_value = data.threshold
-    action = data.action
-    return {"status": "updated"}
-
-# -------------------------
-# LIVE DATA FOR GUI
-# -------------------------
-@app.get("/status")
-def get_status():
-    return {
-        "temperature": current_temperature,
-        "threshold": threshold_value,
-        "action": action
-    }
-
-# -------------------------
-# SIMPLE GUI
-# -------------------------
-@app.get("/", response_class=HTMLResponse)
-def gui():
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-  <title>ESP32 Temperature Monitor</title>
-  <style>
-    body { font-family: Arial; background:#111; color:#eee; text-align:center; }
-    .box { background:#222; padding:20px; width:300px; margin:auto; border-radius:10px; }
-    input, select, button { width:100%; padding:8px; margin:5px; }
-  </style>
-</head>
-<body>
-  <h2>🌡 ESP32 Temperature Monitor</h2>
-
-  <div class="box">
-    <h3>Current Temperature</h3>
-    <h1 id="temp">-- °C</h1>
-
-    <h3>Threshold (°C)</h3>
-    <input type="number" id="threshold" />
-
-    <h3>Action</h3>
-    <select id="action">
-      <option value="LED">LED</option>
-      <option value="ALERT">Alert</option>
-    </select>
-
-    <button onclick="save()">Save Settings</button>
-  </div>
-
-<script>
-async function fetchStatus() {
-  const res = await fetch('/status');
-  const data = await res.json();
-  document.getElementById('temp').innerText =
-    data.temperature !== null ? data.temperature + " °C" : "--";
-  document.getElementById('threshold').value = data.threshold;
-  document.getElementById('action').value = data.action;
-}
-
-async function save() {
-  await fetch('/settings', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      threshold: parseFloat(document.getElementById('threshold').value),
-      action: document.getElementById('action').value
-    })
-  });
-  alert("Settings saved!");
-}
-
-setInterval(fetchStatus, 2000);
-fetchStatus();
-<<<<<<< HEAD
+claude = Anthropic(api_key=os.getenv("CLAUDE_API_KEY") or "")
 
 @app.post("/upload")
-async def upload_image(file: UploadFile = File(...)):
-
-    image_bytes = await file.read()
-    encoded_image = base64.b64encode(image_bytes).decode("utf-8")
-
-    message = client.messages.create(
-        model="claude-3-haiku-20240307",
-        max_tokens=300,
-        messages=[
-            {
-                "role": "user",
+async def handle_plant_data(
+    moisture: Annotated[str, Form(...)],
+    light: Annotated[str, Form(...)],
+    image: Annotated[UploadFile, File(...)]
+):
+    try:
+        # 2. Process Image
+        img_bytes = await image.read()
+        # Claude needs base64 for the Vision API
+        base64_img = base64.b64encode(img_bytes).decode("utf-8")
+        
+        # 3. Get AI Analysis from Claude 3.7 Sonnet
+        # Using the newest model for improved botanical reasoning
+        response = claude.messages.create(
+            model="claude-3-7-sonnet-20250219",
+            max_tokens=500,
+            system="You are a professional botanist. Analyze plant health from images and sensor data.",
+            messages=[{
+                "role": "user", 
                 "content": [
                     {
-                        "type": "image",
+                        "type": "image", 
                         "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": encoded_image
+                            "type": "base64", 
+                            "media_type": "image/jpeg", 
+                            "data": base64_img
                         }
                     },
                     {
-                        "type": "text",
-                        "text": "Analyze this plant. Tell if it is healthy or diseased and suggest action."
+                        "type": "text", 
+                        "text": f"The soil moisture sensor reads {moisture}% and the light sensor reads {light} lux. Based on the photo and sensor data, what is the health status and immediate next step?"
                     }
                 ]
-            }
-        ]
-    )
+            }]
+        )
+        ai_advice = response.content[0].text
 
-    result = message.content[0].text
+        # 4. Upload to Supabase Storage
+        file_path = f"uploads/plant_{os.urandom(4).hex()}.jpg"
+        # We specify the content type so the browser renders it instead of downloading
+        supabase.storage.from_("plants").upload(
+            path=file_path, 
+            file=img_bytes,
+            file_options={"content-type": "image/jpeg"}
+        )
+        
+        # 5. Get Public URL for the image
+        img_url = supabase.storage.from_("plants").get_public_url(file_path)
 
-    return {"analysis": result}
+        # 6. Insert into Database
+        # This will trigger the "Realtime" update on your website automatically
+        db_response = supabase.table("plant_logs").insert({
+            "moisture": moisture,
+            "light": light,
+            "image_url": img_url,
+            "claude_advice": ai_advice
+        }).execute()
 
-=======
->>>>>>> 3f4ba639343ed8b71677c6902aba9146f9ea72ad
-</script>
-</body>
-</html>
-"""
+        return {
+            "status": "success",
+            "message": "Data logged and analyzed",
+            "id": db_response.data[0]['id']
+        }
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
+def health_check():
+    return {"status": "online"}
+
+@app.get("/config")
+def get_config():
+    """Serve public Supabase configuration for frontend"""
+    return {
+        "supabaseUrl": os.getenv("SUPABASE_URL") or "",
+        "supabaseAnonKey": os.getenv("SUPABASE_ANON_KEY") or ""
+    }
+
+@app.get("/")
+def read_root():
+    return FileResponse("static/index.html")
